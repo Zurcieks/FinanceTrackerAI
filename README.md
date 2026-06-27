@@ -1,43 +1,73 @@
-# Spendly — Finance Tracker API
+# Finance Tracker
 
-Osobisty tracker finansów. Backend w .NET (Minimal API),
-aplikacja kliencka w Swift (iOS).
+A personal finance tracker I built to manage my own spending. The backend is a
+.NET Minimal API; the client is a native iOS app written in Swift. The interesting
+part isn't the CRUD — it's the receipt scanning: snap a photo of a receipt and a
+vision model pulls out the merchant, amount, date and category into a draft you
+confirm before saving.
 
-## Funkcje
+## What it does
 
-- Zarządzanie kategoriami (CRUD + archiwizacja zamiast usuwania)
-- Transakcje z filtrowaniem, wyszukiwaniem i paginacją
-- Przeliczanie walut przez API NBP
-- Skanowanie paragonów: vision AI (OpenAI) wyciąga dane do draftu
-- Przechowywanie paragonów w object storage (S3/MinIO)
+- **Categories** with full CRUD, archived instead of hard-deleted so transaction
+  history stays intact
+- **Transactions** with filtering, search and pagination
+- **Currency conversion** via the Polish National Bank (NBP) API.
+- **Receipt scanning** — an OpenAI vision model extracts data from a photo into a
+  draft; the user reviews and confirms before anything is written
+- **Receipt storage** in object storage (S3 / MinIO), with short-lived presigned
+  URLs generated on read
 
 ## Stack
 
-.NET 10, Minimal API, EF Core, PostgreSQL, Docker, OpenAI API
+.NET 10 · Minimal API · EF Core · PostgreSQL · Docker · OpenAI API
 
-## Architektura
+## Architecture
 
-Vertical Slice Architecture — każdy feature samowystarczalny
-(endpoint + request/response + walidator w jednym miejscu).
+The project uses **Vertical Slice Architecture** — each feature lives in its own
+folder with everything it needs (endpoint, request/response, validator) right next
+to it, instead of being spread across horizontal `Services` / `Repositories` layers.
+When I work on a feature, everything about it is in one place.
 
-**Dlaczego bez CQRS/MediatR:** przy tej skali pipeline MediatR
-to zbędny narzut. Walidacja przez FluentValidation + endpoint filter.
+**Why no CQRS / MediatR?** At this scale a mediator pipeline is overhead without a
+payoff — it adds indirection I'd have to justify, not remove. Validation runs through
+FluentValidation wired in as an endpoint filter, which keeps it out of the handlers.
 
-**Dlaczego bez autentykacji:** aplikacja jednoosobowa
+**Why no authentication?** It's a single-user app — there's no concept of a user, so
+there's nothing to authorize. I'd rather leave it out cleanly than bolt on auth that
+guards nothing.
 
-## Uruchomienie
+## Running it locally
 
-1. `docker compose up -d` (PostgreSQL + MinIO)
-2. Ustaw klucz OpenAI: `dotnet user-secrets set "OpenAI:ApiKey" "..."`
-3. `dotnet ef database update`
-4. `dotnet run --project api`
-5. Scalar UI: http://localhost:5204/scalar
+```bash
+docker compose up -d                                  # PostgreSQL + MinIO
+dotnet user-secrets set "OpenAI:ApiKey" "your-key"    # receipt scanning
+dotnet ef database update                             # apply migrations + seed
+dotnet run --project api
+```
 
-## Decyzje techniczne
+Then open the Scalar API UI at http://localhost:5204/scalar.
 
-- **Migawka kursu** — AmountInPLN liczony przy zapisie, nie przy
-  odczycie (kwota historyczna nie "tańczy" przy zmianie kursu)
-- **AI jako niezaufane źródło** — odpowiedź modelu jest walidowana
-  (enumy parsowane bezpiecznie, sugerowana kategoria sprawdzana
-  względem bazy) przed użyciem
-- **Soft delete kategorii** (archiwizacja) — chroni historię transakcji
+## Decisions worth explaining
+
+**Exchange rate is a snapshot, not a live lookup.** When a transaction is saved, its
+PLN value is computed once and stored. Reads never call NBP again. A purchase made
+last month shouldn't change its recorded value just because today's rate moved —
+the historical amount stays fixed.
+
+**The AI is treated as an untrusted source.** A model can return well-formed JSON
+with nonsense inside it — a currency that doesn't exist, a hallucinated category ID.
+So its output is validated before use: enums are parsed safely (anything unrecognized
+becomes null), and a suggested category is checked against the actual database before
+it's accepted. The draft goes to the user to confirm regardless.
+
+**Categories are archived, not deleted.** Hard-deleting a category would orphan every
+transaction that referenced it. Archiving hides it from the active list while keeping
+the history coherent.
+
+## Tests
+
+Unit tests cover the validators and the enum-parsing logic. Integration tests run
+against a real PostgreSQL instance spun up in Docker via Testcontainers (not the EF
+in-memory provider — that doesn't enforce unique indexes or foreign keys, so it would
+pass tests that should fail). They exercise full request → database → response paths,
+including cases like duplicate-name conflicts that only surface against a real database.
