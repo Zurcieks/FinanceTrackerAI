@@ -9,7 +9,8 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
     public void Configure(EntityTypeBuilder<Category> builder)
     {
         builder.HasKey(c => c.Id);
-        builder.Property(c => c.Name).IsRequired().HasMaxLength(255);
+        builder.Property(c => c.Name).IsRequired().HasMaxLength(100);
+        builder.Property(c => c.Icon).IsRequired().HasMaxLength(50);
         builder.Property(c => c.HexColor).IsRequired().HasMaxLength(7);
         builder.HasMany(c => c.Transactions).WithOne(t => t.Category).HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.Restrict); // On delete restrict for future implementations of hard delete categories without transactions
 

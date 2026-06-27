@@ -12,7 +12,7 @@ public class NbpClient(HttpClient http)
 
         var data = await response.Content.ReadFromJsonAsync<NbpRateResponse>(cancellationToken: ct);
 
-        return data?.Rates.FirstOrDefault()?.Mid;
+        return data?.Rates?.FirstOrDefault()?.Mid;
 
     }
 }

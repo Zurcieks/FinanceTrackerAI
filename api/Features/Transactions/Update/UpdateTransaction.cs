@@ -44,7 +44,7 @@ public static class UpdateTransaction
         return app;
     }
 
-    private static async Task<IResult> Handle(Guid id, UpdateTransactionRequest request, AppDbContext context, NbpClient nbpClient, CancellationToken ct)
+    private static async Task<IResult> Handle(Guid id, UpdateTransactionRequest request, AppDbContext context, CurrencyConverter converter, CancellationToken ct)
     {
         var transaction = await context.Transactions.FindAsync([id], ct);
         if (transaction is null)
@@ -57,15 +57,10 @@ public static class UpdateTransaction
         if (category.IsArchived)
             return Results.BadRequest("Cannot assign transaction to archived category");
 
-        decimal rate = 1m;
-        if (request.Currency == TransactionCurrency.EUR)
-        {
-            var euroRate = await nbpClient.GetEuroRateAsync(ct);
-            if (euroRate is null)
-                return Results.Problem("Failed to fetch euro rate from NBP", statusCode: 502);
-            rate = euroRate.Value;
-        }
-        var amountInPLN = Math.Round(request.Amount * rate, 2);
+        var amountInPLN = await converter.ToPlnAsync(request.Amount, request.Currency, ct);
+
+        if (amountInPLN is null)
+            return Results.Problem("Failed to fetch euro rate from NBP", statusCode: 502);
 
         var warsaw = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
         var today = DateOnly.FromDateTime(
@@ -75,7 +70,7 @@ public static class UpdateTransaction
         transaction.MerchantName = request.MerchantName;
         transaction.Description = request.Description;
         transaction.Amount = request.Amount;
-        transaction.AmountInPLN = amountInPLN;
+        transaction.AmountInPLN = amountInPLN.Value;
         transaction.Currency = request.Currency;
         transaction.Type = request.Type;
         transaction.Date = date;

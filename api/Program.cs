@@ -60,6 +60,8 @@ builder.Services.AddSingleton<IAmazonS3>(sp =>
 builder.Services.AddSingleton<ReceiptStorage>();
 builder.Services.AddSingleton<ReceiptScanner>();
 
+builder.Services.AddScoped<CurrencyConverter>();
+
 
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -104,3 +106,4 @@ app.MapScanReceiptEndpoint();
 
 app.Run();
 
+public partial class Program { }

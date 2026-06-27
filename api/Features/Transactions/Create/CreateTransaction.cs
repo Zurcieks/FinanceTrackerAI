@@ -43,7 +43,7 @@ public static class CreateTransaction
         return app;
     }
 
-    private static async Task<IResult> Handle(CreateTransactionRequest request, AppDbContext db, ReceiptStorage storage, NbpClient nbpClient, CancellationToken ct)
+    private static async Task<IResult> Handle(CreateTransactionRequest request, AppDbContext db, ReceiptStorage storage, CurrencyConverter converter, CancellationToken ct)
     {
 
         var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == request.CategoryId, ct);
@@ -57,17 +57,10 @@ public static class CreateTransaction
         if (request.ReceiptKey is not null && !await storage.ExistsAsync(request.ReceiptKey, ct))
             return Results.BadRequest("Receipt not found.");
 
-        decimal rate = 1m;
-        if (request.Currency == TransactionCurrency.EUR)
-        {
-            var euroRate = await nbpClient.GetEuroRateAsync(ct);
-            if (euroRate is null)
-                return Results.Problem("Failed to fetch euro rate from NBP", statusCode: 502);
+        var amountInPLN = await converter.ToPlnAsync(request.Amount, request.Currency, ct);
 
-            rate = euroRate.Value;
-        }
-
-        var amountInPLN = Math.Round(request.Amount * rate, 2);
+        if (amountInPLN is null)
+            return Results.Problem("Failed to fetch euro rate from NBP", statusCode: 502);
 
         var warsaw = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
         var today = DateOnly.FromDateTime(
@@ -82,7 +75,7 @@ public static class CreateTransaction
             MerchantName = request.MerchantName,
             Description = request.Description,
             Amount = request.Amount,
-            AmountInPLN = amountInPLN,
+            AmountInPLN = amountInPLN.Value,
             Currency = request.Currency,
             Type = request.Type,
             ReceiptKey = request.ReceiptKey,
