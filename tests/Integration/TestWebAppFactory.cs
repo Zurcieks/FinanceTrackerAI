@@ -1,5 +1,4 @@
 using Api.Infrastructure;
-using Docker.DotNet.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +9,7 @@ namespace Tests.Integration;
 
 public class TestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("postgres:16").Build();
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("postgres:18").Build();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
