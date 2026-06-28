@@ -43,7 +43,8 @@ builder.Services.AddSerilog(config => config
 builder.Services.AddHttpClient<NbpClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.nbp.pl/api/");
-});
+})
+.AddStandardResilienceHandler();
 
 // Minio - S3 Storage for receipts
 builder.Services.AddSingleton<IAmazonS3>(sp =>
